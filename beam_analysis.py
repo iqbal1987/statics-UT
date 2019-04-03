@@ -109,6 +109,7 @@ class beam():
                         loc=(self.sections[i]['pos'][1]+self.sections[i]['pos'][0])/2
                         Fx.append([Symbol('UDLx'+str(i)),fx,loc,self.sections[i]['load'],self.sections[i]['pos']])
                         Fy.append([Symbol('UDLy'+str(i)),fy,loc,Lsign*self.sections[i]['load'],self.sections[i]['pos']])
+                        # format: [sympy-symbol,eq_load,eq_load_location,load_perUnitLength,[location]]
                     else:
                         print('Improper Angle for UDL')
                 else:
@@ -131,13 +132,14 @@ class beam():
                         loc=self.sections[i]['pos'][1]-(self.sections[i]['pos'][1]-self.sections[i]['pos'][0])*(1/3)
                         Fx.append([Symbol('rTDLax'+str(i)),fx,loc,self.sections[i]['load'],self.sections[i]['pos']]) # just for completeness
                         Fy.append([Symbol('rTDLay'+str(i)),fy,loc,Lsign*self.sections[i]['load'],self.sections[i]['pos']])
+                        # format: same as UDL case.
                     else:
                         print('Improper Angle for TDL')
                 else:
                     print('TDL should be provided with an angle of the load vector (90 or 270) as the direction.')
                     print('TDL is omitted.')
                     
-            elif self.sections[i]['typ']=='XYZ':
+            elif self.sections[i]['typ']=='XYZ':  # dummy template for implementing generic distributed load or other types. 
                 if self.isanumber(self.sections[i]['dirn']):
                     ang=self.sections[i]['dirn']
                     if not (ang<0 & ang>360):
@@ -166,9 +168,12 @@ class beam():
             eqnFx += f[0]
             if not (f[1]==None):
                 v.append((str(f[0]),f[1]))
+        print('='*80)        
         print('Sum Fx = 0')
         print(eqnFx)
+        print('-'*80)
         print(v)
+        print('='*80)
         eqnFx_kn=eqnFx.subs(v)
         eqnFxsol=solveset(eqnFx_kn,Fx[0][0])
         # (x0, y0) = next(iter(sol)) # get an iterator based on object and pull one by one using next command
@@ -186,10 +191,13 @@ class beam():
 
         print('Sum Fy = 0')
         print(eqnFy)
+        print('-'*80)
         print(vy)
+        print('-'*80)
         eqnFy_kn=eqnFy.subs(vy)
         #eqnFysol=solveset(eqnFy_kn)
         print(eqnFy_kn)
+        print('='*80)
         
         # sum Mz=0
         vm=[]
@@ -209,9 +217,12 @@ class beam():
                     eqnM0 += mz[0]
         print('Sum Mz = 0')
         print(eqnM0)
+        print('-'*80)
         print(vm)
+        print('-'*80)
         eqnM0_kn=eqnM0.subs(vm) # substitute knonw moments
         print(eqnM0_kn)
+        print('='*80)
         #eqnFysol=solveset(eqnFy_kn)
         
         # solve equations and find unknowns.
@@ -224,11 +235,12 @@ class beam():
             if mm[1] is None:
                 unkn.append(mm[0])
         print(unkn)
-        
+
         forces=linsolve([eqnFy_kn,eqnM0_kn],unkn)
 # TBD print forces thru loop check if forces exist based on the prioir list.
         #print(str(Fy[0][0])+','+str(Fy[1][0])+'= %f, %f' %(forces.args[0][0],forces.args[0][1]))
         print(forces)
+        print('='*80)
         cnt=0
         for u in unkn:
             for k in Fy:
@@ -242,9 +254,13 @@ class beam():
                     if kk[1]==None: # yet another check
                        kk[1]=forces.args[0][cnt]
             cnt+=1
-            
+
+        #print('='*80)
+        print('Forces in y-direction and Moments about z')
+        print('-'*80)
         print(Fy)
         print(Maz)
+        print('='*80)
         
     # calculate shear force
         dx=0.001
@@ -342,23 +358,23 @@ class beam():
         pltData=self.createConstraintSymbol(scale=0.5)
         #pltData.append(np.array([[0,self.length],[0,0]]))
         for p in pltData:
-            print(len(p))
+            #print(len(p))
             if len(p)>2 and len(p[0]<100):
                 for pp in p:
-                    print(pp)
+                    #print(pp)
                     plt.plot(pp[0],pp[1])
             elif len(p[0])==100: # circle
                 print('circle')
                 plt.gcf().gca().fill(p[0],p[1])
             else:
-                print(p)
+                #print(p)
                 plt.plot(p[0],p[1])
         patch=[]
-        print(self.sections)
+        #print(self.sections)
         for i in self.sections:
             if self.sections[i]['typ']=='point':
                 #plt.gcf().gca().arrow(2,3,0,-3)
-                hw=0.5
+                hw=0.3 #0.5
                 la=0.30*self.length # scaled to beam length for visual appearance
                 sgn=self.conformSignConvention(self.sections[i]['dirn'])
                 if sgn[1]==0:
@@ -366,12 +382,15 @@ class beam():
                 plt.arrow(self.sections[i]['pos'],-1*sgn[1]*la,0,sgn[1]*la+((hw*1.5)*(-1*sgn[1])),head_width=hw,color=[0,0,0])
             elif self.sections[i]['typ']=='UDL':
                 hw=0.3
-                la=0.20*self.length*(self.sections[i]['load'])*0.50 # last factor is for differenciating point load arrow length and UDL
+                if (self.sections[i]['load']/self.length)<=1: # trying this if clause for display purpose
+                    la=0.20*self.length*(self.sections[i]['load'])*0.50 # last factor is for differenciating point load arrow length and UDL
+                else:
+                    la=0.20*self.length*(self.sections[i]['load']/20)*0.50
                 sgn=self.conformSignConvention(self.sections[i]['dirn'])
                 if sgn[1]==0:
                     sgn[1]=1
                 dL=np.ceil((self.sections[i]['pos'][1]-self.sections[i]['pos'][0])/hw/3)
-                nudl=np.linspace(self.sections[i]['pos'][0],self.sections[i]['pos'][1],dL)
+                nudl=np.linspace(self.sections[i]['pos'][0],self.sections[i]['pos'][1],int(dL))
                 for inudl in nudl:                
                     plt.arrow(inudl,-1*sgn[1]*la,0,sgn[1]*la+((hw*1.5)*(-1*sgn[1])),head_width=hw,color=[0,0,0])
                 plt.plot([self.sections[i]['pos'][0],self.sections[i]['pos'][1]],[la,la],color=[0,0,0])
@@ -380,22 +399,20 @@ class beam():
                 hw=0.3
                 if self.sections[i]['typ'][4]=='r':
                     slp=(self.sections[i]['load']-0)/(self.sections[i]['endd']-self.sections[i]['start'])
-                    la_max=0.20*self.length*(self.sections[i]['load'])*0.50 # last factor is for differenciating point load arrow length and DL
+                    la_max=(self.sections[i]['load'])
                     la_min=0
                 elif self.sections[i]['typ'][4]=='l':
                     # in future make it accept a tuple to also ebnable non-zero end load.
                     slp=(0-self.sections[i]['load'])/(self.sections[i]['endd']-self.sections[i]['start'])
-                    la_min=0.20*self.length*(self.sections[i]['load'])*0.50 # last factor is for differenciating point load arrow length and DL
+                    la_min=(self.sections[i]['load'])
                     la_max=0
                 sgn=self.conformSignConvention(self.sections[i]['dirn'])
                 if sgn[1]==0:
                     sgn[1]=1
                     
                 dL=np.ceil((self.sections[i]['pos'][1]-self.sections[i]['pos'][0])/hw/3)
-                nudl=np.linspace(self.sections[i]['pos'][0],self.sections[i]['pos'][1],dL)
-                print(nudl)
+                nudl=np.linspace(self.sections[i]['pos'][0],self.sections[i]['pos'][1],int(dL))
                 for inudl in nudl:
-                    
                     newla=la_min+(inudl-self.sections[i]['pos'][0])*slp
                     if not (newla==0.0): # if clause to circumvent printing an arrow at zero load.
                         plt.arrow(inudl,-1*sgn[1]*newla,0,sgn[1]*newla+((hw*1.5)*(-1*sgn[1])),head_width=hw,color=[0,0,0])
@@ -413,9 +430,11 @@ class beam():
                     dirText=r'$\circlearrowright$'
                     a=-0.5
                     b=0.5
-                print(a)
-                print(b)
-                plt.plot([self.sections[i]['pos']],[0],marker=dirText,markersize=self.length*2,linewidth=0.1,color=[0,0,0])
+                if self.length>3:
+                    mks=self.length*2
+                else:
+                    mks=self.length*10
+                plt.plot([self.sections[i]['pos']],[0],marker=dirText,markersize=mks,linewidth=0.1,color=[0,0,0])
 
                 # Method 2: 
                 #style="simple,tail_width=0.5,head_width=4,head_length=8"
@@ -441,9 +460,9 @@ class beam():
         rolls.append(self.getCircleCoords(xc,yc,diameter=1.0,scale=1.0))
         rolls.append(self.getCircleCoords(xc+0.1,yc,diameter=1.0,scale=1.0))
         pltData=[]
-        print(con)
+        #print(con)
         for i,c in enumerate(con):
-            print('Constraint: '+str(i)+' : '+c)
+            #print('Constraint: '+str(i)+' : '+c)
             if c=='fixed':
                 if i==0: # beginning of beam
                     xs,ys=0-1,0-2
@@ -492,8 +511,6 @@ class beam():
                 pltData.append(ha)
                 """
                 haa=np.multiply(self.createHatch(xs,ys,dx_hatch,dirn='h',n=n_hatches,scale=0.5),1.0)
-                print('LL')
-                print(haa)
                 pltData.append(haa)
                 
                 
@@ -542,8 +559,6 @@ class beam():
         for i in range(n):
             if dirn=='h':
                 hatches.append(np.multiply([hatch[:,0]+(dx*i),hatch[:,1]],1))
-                print('iH')
-                print([hatch[:,0]+(dx*i),hatch[:,1]])
             elif dirn=='v':
                 hatches.append(np.multiply([hatch[:,0],hatch[:,1]+(dx*i)],1))
         return hatches
@@ -582,6 +597,7 @@ class beam():
 if __name__=="__main__":
     b=beam() # m
     test_ex=6
+
 # test 1
     #b.add_section(0,0.3,10,90,'point',0.15) # pointing down
 
@@ -635,7 +651,7 @@ if __name__=="__main__":
 # test 6 ( Example )
 
     if test_ex==6:
-        b.length=14
+        b.length=20
         print('Beam Length = '+str(b.length)+' '+b.unit)
         b.add_constraints('fixed','free')
         print('constraints = '+ str(b.constraints))
@@ -644,6 +660,7 @@ if __name__=="__main__":
         b.add_section(10,14,1,90,'UDL',[10,14])
         b.add_section(11,14,6,90,'point',14)
         b.add_section(11,14,40,'cw','moment',10)
+        #b.add_section(14,20,4,90,'rTDLrmax',[14,20])
         print(b.sections)
         b.calc_reactions()
 
