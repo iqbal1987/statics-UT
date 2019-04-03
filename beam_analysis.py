@@ -2,6 +2,7 @@ import numpy as np
 from numpy import sin, cos, tan, pi
 from sympy import Symbol, symbols, solveset, linsolve
 from matplotlib import pyplot as plt
+from matplotlib.patches import Circle
 
 class beam():
     unit='m' # kN,N-m,N/m
@@ -9,7 +10,7 @@ class beam():
     ds=0.01 #m
     LoadTyp={'point','moment','GDL','UDL','rTDLrmax','rTDLlmax'}
     # Load specification load,dirn,type,pos  dirn:0 to 360 degree, {cw,ccw} pos:x,[xs,xe],
-    constraintDef={'hinge':{'Rx':True,'Ry':True,'Mz':False},'fixed':{'Rx':True,'Ry':True,'Mz':True},'roller':{'Rx':False,'Ry':True,'Mz':False},'free':{'Rx':False,'Ry':False,'Mz':False}}
+    constraintDef={'hinge':{'Rx':True,'Ry':True,'Mzs':False},'fixed':{'Rx':True,'Ry':True,'Mzs':True},'roller':{'Rx':False,'Ry':True,'Mzs':False},'free':{'Rx':False,'Ry':False,'Mzs':False}}
     dirn={'up':0,'down':1,'ccw':0,'cw':1}
     def __init__(self,length=1,units='m',ds=0.01):
         self.unit=units
@@ -77,15 +78,15 @@ class beam():
                     print('Point load is omitted.')
             elif self.sections[i]['typ']=='moment':
                 if isinstance(self.sections[i]['dirn'],str):
-                   msense=self.sections[i]['dirn']
-                   if msense=='cw':
+                    msense=self.sections[i]['dirn']
+                    if msense=='cw':
                         msign=float(-1)
-                   elif msense=='ccw':
+                    elif msense=='ccw':
                         msign=1.0
-                   else:
+                    else:
                         print('Unknown moment sense. Moment omitted.')
                         break;
-                   Maz.append([Symbol('Mz'+str(i)),msign*self.sections[i]['load'],self.sections[i]['pos']])
+                    Maz.append([Symbol('Mz'+str(i)),msign*self.sections[i]['load'],self.sections[i]['pos']])
 
                 else:
                     print('Moment should be provided with cw or ccw as string for the direction.')
@@ -273,9 +274,7 @@ class beam():
                                     Vxx +=ff[1] 
                                 
                 V.append(Vxx)
-
-        plt.plot(LB,V)
-        
+       
             
     # calculate bending moment
         dx=0.001
@@ -287,7 +286,10 @@ class beam():
                 if Maz==[]:
                     M.append(0)
                 else:
-                    M.append(-1.0*Maz[0][1]) # Mzz = -(sum of all moments until each section)
+                    if 's' in str(Maz[0][0]):
+                        M.append(-1.0*Maz[0][1]) # Mzz = -(sum of all moments until each section)
+                    else:
+                        M.append(0) # TODO: combine with the outer if statement.
             else:
                 Mzz=0 # Mzz at section is assumed to be positive
                 for ff in Fy:
@@ -300,8 +302,8 @@ class beam():
                                 if ('U' in str(ff[0])): # UDL N/m * m
                                     Mzz +=(-1.0)*ff[3]*(xx-ff[4][0])*((xx-ff[4][0])/2)
                                 elif (('T' in str(ff[0])) & ('a' in str(ff[0]))): #rTDLrmax
-                                    totalht=ff[4][1]-ff[4][0]
-                                    Mzz +=(-1.0)*0.5*(xx-ff[4][0])*ff[3]*((xx-ff[4][0])/(ff[4][1]-ff[4][0]))*((1/3)*totalht)
+                                    htAtSec=xx-ff[4][0]
+                                    Mzz +=(-1.0)*0.5*(xx-ff[4][0])*ff[3]*((xx-ff[4][0])/(ff[4][1]-ff[4][0]))*((1/3)*htAtSec)
                             else: # if we are past the udl or trdl use equivalent load to calculate the moment.
                                 Mzz+=(-1.0)*ff[1]*(xx-ff[2]) # same for both UDL or TDL since the storage format is same.
                             
@@ -312,9 +314,146 @@ class beam():
                         
                 M.append(-Mzz) # Mzz = -(sum of all moments until each section)
                 
-        plt.plot(LB,M)
+# Plot V and M
+        if 1: 
+            plt.figure()
+            plt.plot(LB,V)        
+            plt.plot(LB,M)
+            plt.plot([0,self.length],[0,0],color=[0,0,0])
+            
+        if 0: # Debug purpose
+            plt.figure()
+            plt.xlim([-5,self.length+10])
+            plt.ylim([-5,self.length])
+            self.plotBeam()
+# Show Plots            
+        plt.show()
+        
+    def plotBeam(self):
+        # setup figure
+        plt.figure()
+        plt.xlim([-5,self.length+10])
+        plt.ylim([-5,self.length])
+
+        # draw contents
+        beamxy=[0,1]# beam of unit dimension
+        pltData=self.createConstraintSymbol(scale=0.5)
+        #pltData.append(np.array([[0,self.length],[0,0]]))
+        for p in pltData:
+            print(len(p))
+            if len(p)>2 and len(p[0]<100):
+                for pp in p:
+                    print(pp)
+                    plt.plot(pp[0],pp[1])
+            elif len(p[0])==100: # circle
+                print('circle')
+                plt.gcf().gca().fill(p[0],p[1])
+            else:
+                print(p)
+                plt.plot(p[0],p[1])
+        patch=[]
+        for i in self.sections:
+            if self.sections[i]['typ']=='point':
+                #plt.gcf().gca().arrow(2,3,0,-3)
+                plt.arrow(2,3,0,-3,head_width=0.1)
+        # show figure
         plt.show()
                 
+    def createConstraintSymbol(self,scale=1.0):
+        L=self.length
+        con=self.constraints
+        tr=np.array([[0,0],[1,0],[0.5,0.6],[0,0]])
+        hl=np.array([[0,1],[0,0]])
+        vl=np.array([[0,0],[0,1]])
+        xc=1
+        yc=1
+        rolls=[]
+        rolls.append(self.getCircleCoords(xc,yc,diameter=1.0,scale=1.0))
+        rolls.append(self.getCircleCoords(xc+0.1,yc,diameter=1.0,scale=1.0))
+        pltData=[]
+        print(con)
+        for i,c in enumerate(con):
+            print('Constraint: '+str(i)+' : '+c)
+            if c=='fixed':
+                if i==0: # beginning of beam
+                    xs,ys=0-1,0-2
+                    xsv=0
+                    yshift=[0.5,0.4]
+                else: # end of beam
+                    xs,ys=L,0-2
+                    xsv=L
+                    yshift=[0.6,0.5]
+                n_hatches=4
+                ha=np.multiply(self.createHatch(xs,ys,dirn='v',n=n_hatches),scale)
+                vll=np.subtract(vl,np.array([[0,0],yshift]))
+                pltData.append(ha)
+                vline=np.add(np.multiply(vll,n_hatches),np.array([[xsv,xsv],[0,0]]))
+                pltData.append(np.multiply(vline,scale))
+                
+            elif c=='hinge':
+                n_hatches=4
+                if i==0: # beginning of beam
+                    xs,ys=0-n_hatches/2,0-1
+                    xsv=0
+                    xshift=0.5
+                else: # end of beam
+                    xs,ys=L-n_hatches/2,0-1
+                    xsv=L
+                    xshift=0.5
+                
+                hll=np.multiply(hl,n_hatches)                
+                hline=np.add(hll,np.array([[xs+xshift,xs+xshift],[0,0]]))
+                scaledhline=np.multiply(hline,scale)
+                shiftedhline=np.subtract(scaledhline,[max(tr[:,1]),max(tr[:,1])])
+                pltData.append(shiftedhline)
+                
+                shiftedtrn=np.subtract(tr,[0,max(tr[:,1])])
+                pltData.append(np.array([shiftedtrn[:,0],shiftedtrn[:,1]]))
+
+                circ=self.getCircleCoords(shiftedtrn[2,0],shiftedtrn[2,1],0.35)
+                shiftedcirc=np.subtract(circ,[0,0]) # just an extra shifting location
+                pltData.append(np.array([shiftedcirc[:,0],shiftedcirc[:,1]]))
+
+                ha=np.multiply(self.createHatch(0-shiftedtrn[0,0],ys-0.25-(shiftedtrn[2,1]-shiftedtrn[1,1]),dirn='h',n=n_hatches),scale)
+                pltData.append(ha)
+            elif c=='roller':
+                dia=1
+                if i==0:
+                    xs,ys=0,0-dia/2
+                else:
+                    xs,ys=L,0-dia/2
+                c=self.getCircleCoords(xs,ys,dia,scale)
+                hll=np.add(hl,np.array([[min(c[:,0]),min(c[:,0])],[min(c[:,1]),min(c[:,1])]]))
+                pltData.append(np.array([c[:,0],c[:,1]]))
+                pltData.append(hll)
+                    
+            elif c=='free':
+                pass
+            else:
+                print('Undefined constraint symbol cannot be printed.')
+        return pltData
+        
+    @staticmethod
+    def getCircleCoords(xc,yc,diameter,scale=1.0):
+        rth=np.linspace(0,2*pi,num=100)
+        roll=np.ndarray([len(rth),2])
+        for i in range(len(rth)):
+            roll[i,0]=xc+scale*diameter*0.5*cos(rth[i])
+            roll[i,1]=yc+scale*diameter*0.5*sin(rth[i])
+        return roll
+    
+    @staticmethod
+    def createHatch(xs=0,ys=0,dirn='h',n=4):
+        hatch=np.array([[xs,ys],[xs+1,ys+1]])
+        hatches=[]
+        dx=1
+        for i in range(n):
+            if dirn=='h':
+                hatches.append([hatch[:,0]+dx*i,hatch[:,1]])
+            elif dirn=='v':
+                hatches.append([hatch[:,0],hatch[:,1]+dx*i])
+        return hatches
+    
     @staticmethod
     def isanumber(a):
         try:
@@ -348,11 +487,14 @@ class beam():
         
 if __name__=="__main__":
     b=beam() # m
+    test_ex=6
 # test 1
     #b.add_section(0,0.3,10,90,'point',0.15) # pointing down
 
+# Hibbeler R.C. Engineering Mechanics Statics 11th Edition in SI units
+
 # test 2 (verified Hibbeler Example 7.10)
-    if False:
+    if test_ex==2:
         b.length=2
         print('Beam Length = '+str(b.length)+' '+b.unit)
         b.add_constraints('fixed','free')
@@ -364,7 +506,7 @@ if __name__=="__main__":
         b.calc_reactions()
         
 # test 3 (verified Hibbeler Example 7.11)
-    if 1:
+    if test_ex==3:
         b.length=8
         print('Beam Length = '+str(b.length)+' '+b.unit)
         b.add_constraints('roller','roller')
@@ -375,8 +517,8 @@ if __name__=="__main__":
         print(b.sections)
         b.calc_reactions()
 
-# test 4 (Hibbeler Example 7.12) (check error: moment dosent go to zero in the right end.
-    if 0:
+# test 4 (verified Hibbeler Example 7.12) 
+    if test_ex==4:
         b.length=20
         print('Beam Length = '+str(b.length)+' '+b.unit)
         b.add_constraints('hinge','hinge')
@@ -386,15 +528,30 @@ if __name__=="__main__":
         print(b.sections)
         b.calc_reactions()
 
-# test 5 (Hibbeler Example 7.8) check error . maximum of moment dosent match
-    if 0:
+# test 5 (verified Hibbeler Example 7.8) 
+    if test_ex==5:
         b.length=9
         print('Beam Length = '+str(b.length)+' '+b.unit)
         b.add_constraints('hinge','roller')
         print('constraints = '+ str(b.constraints))
         b.add_section(0,9,6,90,'rTDLrmax',[0,9])
         print(b.sections)
-        b.calc_reactions()       
+        b.calc_reactions()
+        
+# test 6 ( Example )
+
+    if test_ex==6:
+        b.length=14
+        print('Beam Length = '+str(b.length)+' '+b.unit)
+        b.add_constraints('fixed','free')
+        print('constraints = '+ str(b.constraints))
+        b.add_section(0,10,2,90,'UDL',[0,10])
+        b.add_section(10,11,7.5,90,'point',10)
+        b.add_section(10,14,1,90,'UDL',[10,14])
+        b.add_section(11,14,6,90,'point',14)
+        b.add_section(11,14,40,'cw','moment',14)
+        print(b.sections)
+        b.calc_reactions()
 
 # symplify, subs, lambdify f=lambdify(x,expr,"numpy")=> f(x=a)
-        
+        #b.plotBeam()
